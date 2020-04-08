@@ -1,0 +1,177 @@
+---
+title: 'Chapter 10 Lab 1: Principal Components Analysis'
+output: html_document
+authors: 'W&M MSBA, Section 1, Team 10, Thomeka Watkins, Seth Brown, John Custer'
+---
+
+## Load and explore data
+We are using the R USArrests dataset, which contains the number of arrests per 100,000 residents for assault, murder, and rape in each of the 50 US states in 1973. It also has the percent of the population living in urban areas for each state.
+
+In order to find the principal components, we are looking for the linear combination that maximizes the variance, so here we observe the mean and variance by column for the dataset.
+
+Question: Notice how the variances vary widely; why do you think this is and how could it affect the analysis?
+
+```{r}
+states=row.names(USArrests)
+names(USArrests)
+apply(USArrests, 2, mean) # Returns mean of each column
+apply(USArrests, 2, var)  # Returns variance of each column
+```
+
+## Perform, PCA, standardize data, and observe summary statistics
+The variables are in different units; we must standardize them to get better insights, otherwise the variable with the largest variance (assault) would take up the first principal component.
+
+The **prcomp()** command is used to perform principal component analysis. setting the parameter **scale = true** standardizes the variables.
+
+The first loading vector places equal weight on the 3 types of crime and less on urbanpop, so it corresponds to a measure of overall serious crimes. The second vector is weighted mostly on urbanpop, so it corresponds to level of urbanization of the state.
+
+Question: Is it surprising that the stdev decrease from left to right?
+```{r}
+pr.out=prcomp(USArrests, scale=TRUE) 
+pr.out 
+
+# Summary results include the stdev of each of the 4 principal components; and the loadings (rotation)
+```
+
+## Plot pr.out using a biplot
+Here we use the biplot command to vizualize pr.out. The red arrows are directions of the loadings for the first two principal components and each state is plotted according to its score for the first two principal components.
+```{r}
+biplot(pr.out, scale=0, cex=.6) # Use cex to make font smaller
+
+  # Can multiply by negative 1 to flip the scale since it does not affect variance
+pr.out$rotation=-pr.out$rotation
+pr.out$x=-pr.out$x
+biplot(pr.out, scale=0, cex=.6)
+
+```
+
+## Calculate and plot proportion of variance explained by each principal component
+``` {r}
+pr.out$sdev
+pr.var=pr.out$sdev^2 # Calculate variance
+pr.var
+pve=pr.var/sum(pr.var) # Use the variances/sum of variances to get proportion of variance explained
+pve
+
+plot(pve, xlab="Principal Component", ylab="Proportion of Variance Explained", ylim=c(0,1),type='b')
+
+plot(cumsum(pve), xlab="Principal Component", ylab="Cumulative Proportion of Variance Explained", ylim=c(0,1),type='b')
+
+```
+
+# Part 2:  Applied Exercise
+## Calculate proportion of variance in two ways
+*Question 8 (ISLR, p. 416)*
+"In Section 10.2.3, a formula for calculating PVE was given in Equation 10.8.  On the *USArrests* data, calculate PVE in two ways:  a) Using the *sdev* output of the *prcomp()* function (demonstrated above), and by applying the equation directly.... These two approaches should give the same resuls".
+
+### Method 1 (Quick Review)
+PVE = variance for a column divided by the aggregation of variance for all columns.  
+-  Each column is a principal component 
+- The first principal component is the one that explains the most amount of variation in the data, the second one explains the second most, etc.
+- Each of the "loadings" (phi values) for a principal component add up to one.  
+
+``` {r pve_setup_review} 
+rm(list = ls())
+par(mfrow = c(1,1))
+
+# Same as above, with one important exception 
+# NOTE: use as.matrix() in order for example 2 below (list won't work)
+USArrests <- as.matrix(USArrests)
+
+# Not needed strictly for this example, but still useful
+states <- row.names(USArrests)
+
+# Normalize the data.  This involves scaling, and shifting (centering) it
+apply(USArrests, 2, mean)
+apply(USArrests, 2, var)
+
+# Perform PCA, standardize data, and observe summary statistics
+pr.out <- prcomp(USArrests, scale=TRUE)
+
+# These are the phi values that sum up to 1 
+loadings <- pr.out$rotation 
+head(loadings)
+
+# These are the values for each row (state) 
+# which are multiplied by the loading value for a principle component
+# scores <- pr.out$x
+# head(scores)
+```
+```{r  pve_method1} 
+
+# Method 1 (standard deviation)
+# PVE = column variance / aggregate variation
+pve_method1 <- pr.out$sdev^2 / sum(pr.out$sdev^2)
+print(pve_method1)
+
+```
+
+As noted earlier, the first two principal components explain around 87% of the variation in the dataset.  
+
+The method above is a simple, straightforward way to calculate PVE, but it's also helpful to see how this value can be calculated manually.  This second method uses the correlation matrix and a bit of linear algebra.  
+
+### Method 2:  Using correlation matrix and eigenvalues
+
+On page 377, a footnote mentions, "the principal component directions [i.e. loadings] are the ordered sequence of eigenvectors of the matrix [X^T][X], and the variance of the components are the eigenvalues"
+
+Eigenvalues indicate how much variance there is in the data in the direction of their corresponding eigenvectors. In the biplot above, all of the states were plotted according to a basis determined by the two principle components (X1 and X2 axes), not the four original variables, seen as diagonal vectors in the biplot (also shown below).   
+
+```{r biplot_again}
+biplot(pr.out, scale=0, cex=.6) 
+```
+
+To rotate/shift/sheer the coordinates where the states should be plotted, linear transformations have to be made on the four original variables.  This enables them to be projected onto a two dimensional space. This is done by extracting eigenvalues from the correlation matrix.
+
+```{r pve_method_2_cor_mat}
+# remember when we did this above
+# USArrests <- as.matrix(USArrests)
+R <- cor(USArrests)
+round(R,2) # diagonal should be 1.0
+```
+```{r pve_method_2} 
+
+# decompose the matrix 
+r.eigen <- eigen(R)
+
+# and voila.... pve_method2
+r.eigen$values / sum(r.eigen$values) 
+# should be:
+# [1] 0.62006039 0.24744129 0.08914080 0.04335752
+```
+
+### Bonus:  Working backwards to get the loadings 
+If we can calculate the PVE via linear transformations of the correlation matrix, could we also get the phi values?  i.e. Can we calculate loadings without doing prcomp$rotation?  You can do this with the covariance matrix, but it requires a bit more linear algebra.  For more detailed information, visit files on Professor Chung's website for the course.
+
+``` {r loadings_the_hard_way} 
+# remember when we did this above
+# USArrests <- as.matrix(USArrests)
+n <- nrow(USArrests)
+i <- rep(1,n)
+USArrests.centered <- USArrests - i %*% t(i) %*% USArrests*(1/n)  #Center
+apply(USArrests.centered,2,mean)
+USArrests.scaled <- USArrests.centered %*% diag(1/apply(USArrests.centered, 2, sd)) 
+ 
+  
+# covariance matrix of centered and scaled data
+S <- t(USArrests.scaled) %*% USArrests.scaled/(n-1)
+
+# So... The principal components should be the eigenvectors
+eigen(S)$vectors
+``` 
+
+```{r loadings_method1} 
+### Copied from block above for reference
+
+# Perform PCA, standardize data, and observe summary statistics
+pr.out <- prcomp(USArrests, scale=TRUE)
+
+# These are the phi values that sum up to 1 
+loadings <- pr.out$rotation 
+loadings
+
+```
+
+ISLR notes that "principal components are only unique up to a sign change."  In other words, in both methods the four original variables are all correlated in the same directio nwith PC1, but some two variables are correlated in one direction with PC2 while two are correlated in the other direction.
+
+
+
