@@ -484,6 +484,8 @@ print(pve_method1)</code></pre>
 <p>To rotate/shift/sheer the coordinates where the states should be plotted, linear transformations have to be made on the four original variables. This enables them to be projected onto a two dimensional space. This is done by extracting eigenvalues from the correlation matrix.</p>
 <pre class="r"><code># remember when we did this above
 # USArrests &lt;- as.matrix(USArrests)
+
+# Create a correlation matrix from the original 4 crime variables 
 R &lt;- cor(USArrests)
 round(R,2) # diagonal should be 1.0</code></pre>
 <pre><code>##          Murder Assault UrbanPop Rape
@@ -491,9 +493,10 @@ round(R,2) # diagonal should be 1.0</code></pre>
 ## Assault    0.80    1.00     0.26 0.67
 ## UrbanPop   0.07    0.26     1.00 0.41
 ## Rape       0.56    0.67     0.41 1.00</code></pre>
-<pre class="r"><code># decompose the matrix 
+<pre class="r"><code># decompose the correlation matrix 
 r.eigen &lt;- eigen(R)
 
+# get the eigen values and divide them by their aggregated amount
 # and voila.... pve_method2
 r.eigen$values / sum(r.eigen$values) </code></pre>
 <pre><code>## [1] 0.62006039 0.24744129 0.08914080 0.04335752</code></pre>
@@ -502,22 +505,30 @@ r.eigen$values / sum(r.eigen$values) </code></pre>
 </div>
 <div id="bonus-working-backwards-to-get-the-loadings" class="section level3">
 <h3>Bonus: Working backwards to get the loadings</h3>
-<p>If we can calculate the PVE via linear transformations of the correlation matrix, could we also get the phi values? i.e. Can we calculate loadings without doing prcomp$rotation? You can do this with the covariance matrix, but it requires a bit more linear algebra. For more detailed information, visit files on Professor Chung’s website for the course.</p>
+<p>If we can calculate the PVE via linear transformations of the correlation matrix, could we also get the phi values? i.e. Can we calculate loadings without doing prcomp$rotation? You can do this with the covariance matrix, but it requires a bit more linear algebra, because out matrix is not square.</p>
 <pre class="r"><code># remember when we did this above
-# USArrests &lt;- as.matrix(USArrests)
+USArrests &lt;- as.matrix(USArrests)
+
+# These will be used to traspose the data and perform matrix multiplication 
 n &lt;- nrow(USArrests)
 i &lt;- rep(1,n)
+
+# Center &amp; rescale the original data
 USArrests.centered &lt;- USArrests - i %*% t(i) %*% USArrests*(1/n)  #Center
-apply(USArrests.centered,2,mean)</code></pre>
-<pre><code>##        Murder       Assault      UrbanPop          Rape 
-##  6.216935e-16  9.088182e-15 -6.253574e-15  4.404567e-15</code></pre>
-<pre class="r"><code>USArrests.scaled &lt;- USArrests.centered %*% diag(1/apply(USArrests.centered, 2, sd)) 
+USArrests.scaled &lt;- apply(USArrests.centered,2,mean)
+
+
+# In this case, the eigenVECTORS are on the diagonal axis, 
+# and we need the inverse of the standard deviation for each cell
+USArrests.normalized &lt;- USArrests.centered %*% diag(1/apply(USArrests.centered, 2, sd)) 
  
-  
-# covariance matrix of centered and scaled data
-S &lt;- t(USArrests.scaled) %*% USArrests.scaled/(n-1)
+# After centering and rescaling the dataset,
+# Create a covariance matrix by transposing the normalized data 
+# and multiplying by 1/n-1 rows
+S &lt;- t(USArrests.normalized) %*% USArrests.normalized/(n-1)
 
 # So... The principal components should be the eigenvectors
+# And the output should be the same matrix of loadings in prcomp$rotation
 eigen(S)$vectors</code></pre>
 <pre><code>##           [,1]       [,2]       [,3]        [,4]
 ## [1,] 0.5358995  0.4181809 -0.3412327  0.64922780
